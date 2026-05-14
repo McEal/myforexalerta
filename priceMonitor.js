@@ -7,7 +7,6 @@ let ws = null;
 let sendAlertCallback = null;
 let subscribedSymbols = new Set();
 let pingInterval = null;
-let reconnectTimeout = null;
 
 export function startPriceMonitor(botSendFn) {
   sendAlertCallback = botSendFn;
@@ -22,12 +21,8 @@ function connect() {
     console.log("✅ Finnhub WebSocket connected");
     subscribedSymbols.clear();
     resubscribeAll();
-
-    // Keep-alive ping every 30s
     pingInterval = setInterval(() => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.ping();
-      }
+      if (ws.readyState === WebSocket.OPEN) ws.ping();
     }, 30000);
   });
 
@@ -36,18 +31,16 @@ function connect() {
       const msg = JSON.parse(data.toString());
       if (msg.type === "trade" && msg.data) {
         for (const trade of msg.data) {
-          checkAlerts(trade.s, trade.p); // symbol, price
+          checkAlerts(trade.s, trade.p);
         }
       }
-    } catch (e) {
-      // ignore parse errors
-    }
+    } catch (e) {}
   });
 
   ws.on("close", () => {
-    console.log("⚠️ Finnhub WebSocket closed. Reconnecting in 10s...");
+    console.log("⚠️ Reconnecting in 10s...");
     clearInterval(pingInterval);
-    reconnectTimeout = setTimeout(connect, 10000);
+    setTimeout(connect, 10000);
   });
 
   ws.on("error", (err) => {
@@ -58,12 +51,9 @@ function connect() {
 
 export function resubscribeAll() {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
-
   const symbols = getPairsWithAlerts();
   for (const symbol of symbols) {
-    if (!subscribedSymbols.has(symbol)) {
-      subscribe(symbol);
-    }
+    if (!subscribedSymbols.has(symbol)) subscribe(symbol);
   }
 }
 
@@ -79,7 +69,6 @@ function unsubscribe(symbol) {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   ws.send(JSON.stringify({ type: "unsubscribe", symbol }));
   subscribedSymbols.delete(symbol);
-  console.log(`🔕 Unsubscribed from ${symbol}`);
 }
 
 async function checkAlerts(symbol, currentPrice) {
@@ -94,8 +83,9 @@ async function checkAlerts(symbol, currentPrice) {
 
     if (triggered) {
       const emoji = alert.direction === "above" ? "📈" : "📉";
+      const recurTag = alert.recurrent ? " 🔁" : "";
       const msg =
-        `🔔 *Price Alert Triggered!*\n\n` +
+        `🔔 *Price Alert Triggered!*${recurTag}\n\n` +
         `${emoji} *${alert.pair}* hit your target\n` +
         `Target: \`${target}\`\n` +
         `Current: \`${currentPrice}\`\n` +
@@ -106,16 +96,7 @@ async function checkAlerts(symbol, currentPrice) {
       if (!alert.recurrent) {
         await deleteAlert(alert.id);
         const remaining = getAllAlerts().filter((a) => a.symbol === symbol);
-        if (remaining.length === 0) {
-          unsubscribe(symbol);
-        }
-      }
-      await deleteAlert(alert.id);
-
-      // Unsubscribe from symbol if no more alerts for it
-      const remaining = getAllAlerts().filter((a) => a.symbol === symbol);
-      if (remaining.length === 0) {
-        unsubscribe(symbol);
+        if (remaining.length === 0) unsubscribe(symbol);
       }
     }
   }
