@@ -22,10 +22,10 @@ export function getAllAlerts() {
   return load().alerts;
 }
 
-export async function addAlert({ chatId, pair, price, direction, symbol }) {
+export async function addAlert({ chatId, pair, price, direction, symbol, recurrent }) {
   const data = load();
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
-  data.alerts.push({ id, chatId, pair, price, direction, symbol, createdAt: new Date().toISOString() });
+db.data.alerts.push({ id, chatId, pair, price, direction, symbol, recurrent: recurrent || false, createdAt: new Date().toISOString() });
   save(data);
   return id;
 }
