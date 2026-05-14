@@ -6,79 +6,66 @@ import { startPriceMonitor, subscribe } from "./priceMonitor.js";
 
 const bot = new Bot(process.env.BOT_TOKEN);
 
-// ─── /start ──────────────────────────────────────────────────────────────────
 bot.command("start", (ctx) => {
   ctx.reply(
     `👋 *Welcome to Forex Alert Bot!*\n\n` +
-    `Set unlimited price alerts on any forex pair and get pinged here when price hits your level.\n\n` +
+    `Set unlimited price alerts on any forex pair.\n\n` +
     `*Commands:*\n` +
     `📌 /alert \`PAIR PRICE above|below\`\n` +
-    `   _Example:_ /alert EURUSD 1.0850 above\n\n` +
+    `📌 /alert \`PAIR PRICE above|below recurrent\`\n` +
+    `   _Example:_ /alert EURUSD 1.0850 above\n` +
+    `   _Example:_ /alert XAUUSD 2300 below recurrent\n\n` +
     `📋 /alerts — view your active alerts\n` +
-    `❌ /remove \`ID\` — cancel an alert\n\n` +
-    `*Supported pairs:* EURUSD, GBPUSD, USDJPY, XAUUSD, GBPJPY, AUDUSD, and more.`,
+    `❌ /remove \`ID\` — cancel an alert`,
     { parse_mode: "Markdown" }
   );
 });
 
-// ─── /help ───────────────────────────────────────────────────────────────────
-bot.command("help", (ctx) => {
-  ctx.reply(
-    `*How to set an alert:*\n` +
-    `/alert EURUSD 1.0850 above\n` +
-    `/alert XAUUSD 2350 below\n` +
-    `/alert GBPJPY 195.50 above\n\n` +
-    `*above* = alert when price rises to or above your level\n` +
-    `*below* = alert when price falls to or below your level\n\n` +
-    `Use /alerts to see your active alerts\n` +
-    `Use /remove ID to cancel one`,
-    { parse_mode: "Markdown" }
-  );
-});
-
-// ─── /alert ──────────────────────────────────────────────────────────────────
 bot.command("alert", async (ctx) => {
-  const args = ctx.match?.trim().split(/\s+/);
-  if (!args || args.length < 3) {
-    return ctx.reply(
-      "⚠️ Usage: /alert PAIR PRICE above|below\nExample: /alert EURUSD 1.0850 above"
+  try {
+    const args = ctx.match?.trim().split(/\s+/);
+    if (!args || args.length < 3) {
+      return ctx.reply("⚠️ Usage: /alert PAIR PRICE above|below\nExample: /alert EURUSD 1.0850 above");
+    }
+
+    const [rawPair, rawPrice, rawDir, rawMode] = args;
+    const recurrent = rawMode?.toLowerCase() === "recurrent";
+
+    const parsed = parsePair(rawPair);
+    if (!parsed) {
+      return ctx.reply(`❌ Unknown pair: *${rawPair}*`, { parse_mode: "Markdown" });
+    }
+
+    const price = parseFloat(rawPrice);
+    if (isNaN(price) || price <= 0) {
+      return ctx.reply("❌ Invalid price. Enter a positive number.");
+    }
+
+    const direction = rawDir?.toLowerCase();
+    if (direction !== "above" && direction !== "below") {
+      return ctx.reply("❌ Direction must be `above` or `below`.", { parse_mode: "Markdown" });
+    }
+
+    const chatId = ctx.chat.id.toString();
+    const id = await addAlert({ chatId, pair: parsed.pair, price, direction, symbol: parsed.symbol, recurrent });
+    subscribe(parsed.symbol);
+
+    const emoji = direction === "above" ? "📈" : "📉";
+    const recurringLabel = recurrent ? "🔁 Recurrent" : "🔔 One-time";
+    ctx.reply(
+      `✅ *Alert set!*\n\n` +
+      `${emoji} *${parsed.pair}* — ${direction} \`${formatPrice(price, parsed.pair)}\`\n` +
+      `Type: ${recurringLabel}\n` +
+      `Alert ID: \`${id}\`\n\n` +
+      `You'll get a ping when price hits your level.`,
+      { parse_mode: "Markdown" }
     );
+  } catch (err) {
+    console.error("Alert command error:", err);
+    ctx.reply("❌ Something went wrong setting the alert. Try again.");
   }
-
-  const [rawPair, rawPrice, rawDir, rawMode] = args;
-  const recurrent = rawMode?.toLowerCase() === "recurrent";
-  const parsed = parsePair(rawPair);
-  if (!parsed) {
-    return ctx.reply(`❌ Unknown pair: *${rawPair}*\nTry something like EURUSD, GBPUSD, XAUUSD.`, { parse_mode: "Markdown" });
-  }
-
-  const price = parseFloat(rawPrice);
-  if (isNaN(price) || price <= 0) {
-    return ctx.reply("❌ Invalid price. Enter a positive number.");
-  }
-
-  const direction = rawDir?.toLowerCase();
-  if (direction !== "above" && direction !== "below") {
-    return ctx.reply("❌ Direction must be `above` or `below`.", { parse_mode: "Markdown" });
-  }
-
-  const chatId = ctx.chat.id.toString();
-  const id = await addAlert({ chatId, pair: parsed.pair, price, direction, symbol: parsed.symbol, recurrent });
-  subscribe(parsed.symbol);
-
-   const emoji = direction === "above" ? "📈" : "📉";
-  const recurringLabel = recurrent ? "🔁 Recurrent" : "🔔 One-time";
-  ctx.reply(
-    `✅ *Alert set!*\n\n` +
-    `${emoji} *${parsed.pair}* — ${direction} \`${formatPrice(price, parsed.pair)}\`\n` +
-    `Type: ${recurringLabel}\n` +
-    `Alert ID: \`${id}\`\n\n` +
-    `You'll get a ping here when price hits your level.`,
-    { parse_mode: "Markdown" }
-  );
 });
 
-// ─── /alerts ─────────────────────────────────────────────────────────────────
 bot.command("alerts", (ctx) => {
   const chatId = ctx.chat.id.toString();
   const alerts = getAlerts(chatId);
@@ -100,7 +87,6 @@ bot.command("alerts", (ctx) => {
   );
 });
 
-// ─── /remove ─────────────────────────────────────────────────────────────────
 bot.command("remove", async (ctx) => {
   const id = ctx.match?.trim();
   if (!id) return ctx.reply("Usage: /remove ALERT_ID\nGet IDs from /alerts");
@@ -115,7 +101,6 @@ bot.command("remove", async (ctx) => {
   }
 });
 
-// ─── Start ───────────────────────────────────────────────────────────────────
 async function sendAlert(chatId, text) {
   try {
     await bot.api.sendMessage(chatId, text, { parse_mode: "Markdown" });
@@ -125,6 +110,5 @@ async function sendAlert(chatId, text) {
 }
 
 startPriceMonitor(sendAlert);
-
 bot.start();
 console.log("🤖 Forex Alert Bot running...");
