@@ -45,7 +45,8 @@ bot.command("alert", async (ctx) => {
     );
   }
 
-  const [rawPair, rawPrice, rawDir] = args;
+  const [rawPair, rawPrice, rawDir, rawMode] = args;
+  const recurrent = rawMode?.toLowerCase() === "recurrent";
   const parsed = parsePair(rawPair);
   if (!parsed) {
     return ctx.reply(`❌ Unknown pair: *${rawPair}*\nTry something like EURUSD, GBPUSD, XAUUSD.`, { parse_mode: "Markdown" });
@@ -62,13 +63,15 @@ bot.command("alert", async (ctx) => {
   }
 
   const chatId = ctx.chat.id.toString();
-  const id = await addAlert({ chatId, pair: parsed.pair, price, direction, symbol: parsed.symbol });
+  const id = await addAlert({ chatId, pair: parsed.pair, price, direction, symbol: parsed.symbol, recurrent });
   subscribe(parsed.symbol);
 
-  const emoji = direction === "above" ? "📈" : "📉";
+   const emoji = direction === "above" ? "📈" : "📉";
+  const recurringLabel = recurrent ? "🔁 Recurrent" : "🔔 One-time";
   ctx.reply(
     `✅ *Alert set!*\n\n` +
     `${emoji} *${parsed.pair}* — ${direction} \`${formatPrice(price, parsed.pair)}\`\n` +
+    `Type: ${recurringLabel}\n` +
     `Alert ID: \`${id}\`\n\n` +
     `You'll get a ping here when price hits your level.`,
     { parse_mode: "Markdown" }
@@ -86,7 +89,8 @@ bot.command("alerts", (ctx) => {
 
   const lines = alerts.map((a, i) => {
     const emoji = a.direction === "above" ? "📈" : "📉";
-    return `${i + 1}. ${emoji} *${a.pair}* — ${a.direction} \`${a.price}\`\n   ID: \`${a.id}\``;
+    const recurIcon = a.recurrent ? " 🔁" : "";
+    return `${i + 1}. ${emoji} *${a.pair}* — ${a.direction} \`${a.price}\`${recurIcon}\n   ID: \`${a.id}\``;
   });
 
   ctx.reply(
