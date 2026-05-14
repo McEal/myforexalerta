@@ -102,6 +102,14 @@ async function checkAlerts(symbol, currentPrice) {
         `Direction: ${alert.direction === "above" ? "Crossed Above" : "Crossed Below"}`;
 
       await sendAlertCallback(alert.chatId, msg);
+
+      if (!alert.recurrent) {
+        await deleteAlert(alert.id);
+        const remaining = getAllAlerts().filter((a) => a.symbol === symbol);
+        if (remaining.length === 0) {
+          unsubscribe(symbol);
+        }
+      }
       await deleteAlert(alert.id);
 
       // Unsubscribe from symbol if no more alerts for it
