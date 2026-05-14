@@ -4,7 +4,7 @@ const FILE = "alerts.json";
 
 function load() {
   if (!existsSync(FILE)) return { alerts: [] };
-  try { return JSON.parse(readFileSync(FILE, "utf8")); } 
+  try { return JSON.parse(readFileSync(FILE, "utf8")); }
   catch { return { alerts: [] }; }
 }
 
@@ -25,7 +25,7 @@ export function getAllAlerts() {
 export async function addAlert({ chatId, pair, price, direction, symbol, recurrent }) {
   const data = load();
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
-db.data.alerts.push({ id, chatId, pair, price, direction, symbol, recurrent: recurrent || false, createdAt: new Date().toISOString() });
+  data.alerts.push({ id, chatId, pair, price, direction, symbol, recurrent: recurrent || false, createdAt: new Date().toISOString() });
   save(data);
   return id;
 }
